@@ -8,8 +8,6 @@ Pilar kedua adalah *Memory-Mapped I/O* (MMIO). Ini adalah metode pemetaan regist
 
 Pilar ketiga berpusat pada spesifikasi mesin virtual QEMU, khususnya profil papan induk virtual bernama `virt`. Profil ini memiliki peta memori tetap yang menjadi acuan mutlak proyek ini. Dua alamat krusial yang perlu Anda ingat adalah alamat awal RAM di `0x80000000`, yang menjadi titik fisik pertama bagi CPU RISC-V untuk mencari dan mengeksekusi instruksi setelah siklus *reset* selesai, serta alamat register UART di `0x10000000`. Alamat UART ini adalah basis fisik untuk pengontrol serial standar, di mana karakter yang ditulis ke alamat tersebut akan diteruskan oleh QEMU secara langsung ke terminal *host* Anda.
 
----
-
 ## II. Persiapan Perangkat Lunak
 
 ```bash
@@ -22,15 +20,11 @@ sudo apt install gcc-riscv64-unknown-elf qemu-system-misc
 
 Proses kompilasi proyek ini membutuhkan *toolchain* khusus untuk melakukan kompilasi silang (*cross-compilation*), mengingat arsitektur komputer kerja Anda kemungkinan besar berbeda dengan arsitektur target RISC-V. Anda dapat menginstal *compiler* GCC spesifik RISC-V dan emulator QEMU pada distribusi Linux berbasis Debian atau Ubuntu menggunakan perintah di atas. Setelah instalasi selesai, pastikan perangkat lunak telah terpasang dengan benar dengan memeriksa versinya melalui perintah `riscv64-unknown-elf-gcc --version` dan `qemu-system-riscv64 --version` di terminal Anda.
 
----
-
 ## III. Siklus Hidup Berkas (Pipeline Produksi)
 
 Proyek ini melibatkan rantai transformasi berkas yang linier, di mana data mengalir dari kode teks yang dipahami manusia menjadi sekumpulan bit murni yang dieksekusi oleh CPU. Alur ini dimulai dari berkas `hello.s` yang berisi kode sumber instruksi bahasa *assembly* tingkat rendah murni. Selanjutnya, terdapat berkas konfigurasi `linker.ld` yang bertindak sebagai cetak biru untuk mengatur pemetaan sektor kode ke alamat memori fisik RAM.
 
 Proses kompilasi kemudian akan menghasilkan berkas objek `hello.o`, yakni hasil translasi dari *assembly* ke kode mesin yang alamat memorinya masih bersifat relatif. Berkas objek ini lalu ditautkan menjadi `hello.elf`, sebuah berkas biner terstruktur yang sudah terikat dengan alamat memori pasti beserta metadata untuk keperluan *debugging*. Terakhir, berkas tersebut dikupas menjadi `hello.bin`, sebuah biner mentah murni tanpa *header* ELF yang berisi 100% instruksi CPU yang siap pakai.
-
----
 
 ## IV. Implementasi Langkah Demi Langkah
 
@@ -111,8 +105,6 @@ qemu-system-riscv64 -machine virt -bios hello.bin -nographic
 
 Setelah berkas biner mentah siap, Anda dapat mengeksekusinya di dalam komponen sistem emulator QEMU. Parameter `-machine virt` pada perintah di atas memilih profil mesin virtual yang menyediakan alamat RAM pada basis yang tepat, sedangkan parameter `-bios` memerintahkan QEMU untuk menyalin isi dari berkas `hello.bin` secara langsung ke alamat awal memori RAM tersebut sebelum melepas pin *reset* CPU. Penggunaan parameter `-nographic` sangat penting karena ia akan menolak pembukaan jendela grafis eksternal dan langsung menghubungkan interkoneksi MMIO UART ke aliran terminal tempat Anda bekerja.
 
----
-
 ## V. Alur Kronologis Eksekusi Sistem (Runtime Flow)
 
 Berikut adalah urutan kejadian logis di dalam sistem secara bertahap saat program dieksekusi:
@@ -125,8 +117,6 @@ Berikut adalah urutan kejadian logis di dalam sistem secara bertahap saat progra
 6. **Pengecekan Kondisi (Percabangan):**
 * **Jika *byte* = `0x00` (Selesai):** Program melompat ke label `end` dan mengunci diri dalam *infinite loop* (perulangan tanpa batas) untuk mencegah *error*.
 * **Jika *byte* ≠ `0x00` (Lanjut):** Karakter dikirim ke `t0` (MMIO UART) untuk dicetak, penunjuk alamat `t1` digeser 1 *byte* ke depan, lalu eksekusi kembali memutar ke langkah 5.
-
----
 
 ## VI. Cara Menghentikan Simulasi
 
