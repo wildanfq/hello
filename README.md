@@ -1,7 +1,5 @@
 # Pemrograman Bare-Metal pada CPU RISC-V Menggunakan Assembly dan Emulator QEMU
 
----
-
 ## I. Peta Konsep & Teori Dasar
 
 Untuk membangun sistem tanpa bantuan sistem operasi, Anda wajib memahami tiga pilar utama arsitektur komputer. Pilar pertama adalah lingkungan *bare-metal*, yakni kondisi di mana kode program dieksekusi langsung oleh *core* CPU tanpa adanya lapisan abstraksi seperti Linux atau Windows. Konsekuensi dari lingkungan ini adalah ketiadaan manajemen memori virtual, skeduler *thread*, *file system*, maupun pustaka standar C. Sebagai pemrogram, Anda memegang tanggung jawab penuh untuk mengonfigurasi memori, menangani interupsi, dan mengontrol periferal secara manual melalui instruksi mesin.
