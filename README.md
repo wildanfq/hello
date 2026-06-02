@@ -1,39 +1,18 @@
-# Panduan Lengkap: Pemrograman Bare-Metal pada CPU RISC-V Menggunakan Assembly dan Emulator QEMU
+# Pemrograman Bare-Metal pada CPU RISC-V Menggunakan Assembly dan Emulator QEMU
 
 ---
 
 ## I. Peta Konsep & Teori Dasar
 
-Untuk membangun sistem tanpa bantuan OS, Anda wajib memahami tiga pilar arsitektur komputer berikut:
+Untuk membangun sistem tanpa bantuan sistem operasi, Anda wajib memahami tiga pilar utama arsitektur komputer. Pilar pertama adalah lingkungan *bare-metal*, yakni kondisi di mana kode program dieksekusi langsung oleh *core* CPU tanpa adanya lapisan abstraksi seperti Linux atau Windows. Konsekuensi dari lingkungan ini adalah ketiadaan manajemen memori virtual, skeduler *thread*, *file system*, maupun pustaka standar C. Sebagai pemrogram, Anda memegang tanggung jawab penuh untuk mengonfigurasi memori, menangani interupsi, dan mengontrol periferal secara manual melalui instruksi mesin.
 
-### 1. Lingkungan Bare-Metal
+Pilar kedua adalah *Memory-Mapped I/O* (MMIO). Ini adalah metode pemetaan register kendali periferal eksternal, seperti pengontrol serial UART, ke dalam ruang alamat memori yang sama dengan RAM utama. Dengan MMIO, CPU tidak membutuhkan instruksi khusus untuk mengakses periferal. Anda cukup mengirim data ke luar sistem menggunakan instruksi operasi memori standar, seperti *Store Byte*, ke alamat spesifik yang telah ditentukan oleh perancang perangkat keras.
 
-*Bare-metal* adalah kondisi di mana kode program dieksekusi langsung oleh *core* CPU tanpa adanya lapisan abstraksi seperti Sistem Operasi (Linux, Windows, atau RTOS).
-
-* **Konsekuensi:** Tidak ada manajemen memori virtual (MMU aktif), tidak ada skeduler *thread*, tidak ada *file system*, dan tidak ada pustaka standar C (`stdio.h`, `malloc`, dll.).
-* **Tanggung Jawab:** Anda selaku programmer wajib mengonfigurasi memori, menangani interupsi, dan mengontrol periferal secara manual melalui instruksi mesin.
-
-### 2. Memory-Mapped I/O (MMIO)
-
-MMIO adalah metode di mana register kendali periferal eksternal (seperti pengontrol serial UART) dipetakan ke dalam ruang alamat memori yang sama dengan RAM utama.
-
-* CPU tidak membutuhkan instruksi khusus untuk mengakses periferal.
-* Mengirim data ke luar sistem cukup dilakukan dengan menggunakan instruksi operasi memori standar (seperti `sb` atau *Store Byte*) ke alamat spesifik yang telah ditentukan oleh perancang perangkat keras.
-
-### 3. Spesifikasi Mesin Virtual QEMU (`virt`)
-
-Emulator QEMU menyediakan profil papan induk (*motherboard*) virtual bernama `virt`. Profil ini memiliki peta memori (*memory map*) tetap yang menjadi acuan mutlak proyek ini:
-
-* **Alamat Awal RAM (`0x80000000`):** Titik fisik pertama di mana CPU RISC-V akan mencari dan mengeksekusi instruksi setelah siklus *reset* selesai.
-* **Alamat Register UART (`0x10000000`):** Alamat fisik basis untuk pengontrol serial standar NS16550A. Karakter yang ditulis ke alamat ini akan diteruskan oleh QEMU ke terminal *host* Anda.
+Pilar ketiga berpusat pada spesifikasi mesin virtual QEMU, khususnya profil papan induk virtual bernama `virt`. Profil ini memiliki peta memori tetap yang menjadi acuan mutlak proyek ini. Dua alamat krusial yang perlu Anda ingat adalah alamat awal RAM di `0x80000000`, yang menjadi titik fisik pertama bagi CPU RISC-V untuk mencari dan mengeksekusi instruksi setelah siklus *reset* selesai, serta alamat register UART di `0x10000000`. Alamat UART ini adalah basis fisik untuk pengontrol serial standar, di mana karakter yang ditulis ke alamat tersebut akan diteruskan oleh QEMU secara langsung ke terminal *host* Anda.
 
 ---
 
 ## II. Persiapan Perangkat Lunak
-
-Proses kompilasi membutuhkan *toolchain* khusus untuk melakukan kompilasi silang (*cross-compilation*), karena arsitektur komputer kerja Anda (biasanya x86_64) berbeda dengan arsitektur target (RISC-V).
-
-Jalankan perintah berikut pada distribusi Linux berbasis Debian/Ubuntu:
 
 ```bash
 # Memperbarui indeks paket repositori
@@ -41,24 +20,17 @@ sudo apt update
 
 # Memasang compiler GCC spesifik RISC-V (bare-metal/elf) dan emulator QEMU
 sudo apt install gcc-riscv64-unknown-elf qemu-system-misc
-
 ```
 
-> **Catatan Verifikasi:** Anda dapat memastikan perangkat lunak terpasang dengan memeriksa versinya menggunakan perintah `riscv64-unknown-elf-gcc --version` dan `qemu-system-riscv64 --version`.
+Proses kompilasi proyek ini membutuhkan *toolchain* khusus untuk melakukan kompilasi silang (*cross-compilation*), mengingat arsitektur komputer kerja Anda kemungkinan besar berbeda dengan arsitektur target RISC-V. Anda dapat menginstal *compiler* GCC spesifik RISC-V dan emulator QEMU pada distribusi Linux berbasis Debian atau Ubuntu menggunakan perintah di atas. Setelah instalasi selesai, pastikan perangkat lunak telah terpasang dengan benar dengan memeriksa versinya melalui perintah `riscv64-unknown-elf-gcc --version` dan `qemu-system-riscv64 --version` di terminal Anda.
 
 ---
 
 ## III. Siklus Hidup Berkas (Pipeline Produksi)
 
-Proyek ini melibatkan rantai transformasi berkas yang linier. Data mengalir dari kode teks yang dipahami manusia hingga menjadi bit murni yang dipahami oleh gerbang logika CPU.
+Proyek ini melibatkan rantai transformasi berkas yang linier, di mana data mengalir dari kode teks yang dipahami manusia menjadi sekumpulan bit murni yang dieksekusi oleh CPU. Alur ini dimulai dari berkas `hello.s` yang berisi kode sumber instruksi bahasa *assembly* tingkat rendah murni. Selanjutnya, terdapat berkas konfigurasi `linker.ld` yang bertindak sebagai cetak biru untuk mengatur pemetaan sektor kode ke alamat memori fisik RAM.
 
-| Nama Berkas | Jenis Berkas | Ekstensi | Peran & Karakteristik dalam Proyek |
-| --- | --- | --- | --- |
-| **`hello.s`** | *Source Code* | `.s` | Berisi instruksi bahasa assembly manusia tingkat rendah murni. |
-| **`linker.ld`** | *Configuration* | `.ld` | Cetak biru yang mengatur pemetaan sektor kode ke alamat memori fisik RAM. |
-| **`hello.o`** | *Object File* | `.o` | Hasil translasi dari assembly ke kode mesin. Alamat memori internal masih bersifat relatif (mengambang). |
-| **`hello.elf`** | *Executable* | `.elf` | Berkas biner terstruktur (Executable and Linkable Format) yang sudah terikat alamat memori pasti, lengkap dengan metadata untuk proses *debugging*. |
-| **`hello.bin`** | *Raw Binary* | `.bin` | Hasil kupasan akhir. Semua header ELF dibuang, menyisakan 100% instruksi CPU murni siap pakai. |
+Proses kompilasi kemudian akan menghasilkan berkas objek `hello.o`, yakni hasil translasi dari *assembly* ke kode mesin yang alamat memorinya masih bersifat relatif. Berkas objek ini lalu ditautkan menjadi `hello.elf`, sebuah berkas biner terstruktur yang sudah terikat dengan alamat memori pasti beserta metadata untuk keperluan *debugging*. Terakhir, berkas tersebut dikupas menjadi `hello.bin`, sebuah biner mentah murni tanpa *header* ELF yang berisi 100% instruksi CPU yang siap pakai.
 
 ---
 
@@ -66,11 +38,8 @@ Proyek ini melibatkan rantai transformasi berkas yang linier. Data mengalir dari
 
 ### 1. Menulis Kode Assembly (`hello.s`)
 
-Buat berkas bernama `hello.s`. Kode ini bertanggung jawab menginisialisasi penunjuk alamat, membaca karakter satu per satu, dan mengirimkannya ke port serial.
-
 ```assembly
 .equ UART_BASE, 0x10000000      # Mendefinisikan konstanta alamat UART
-
 .section .text                  # Menandai blok memori sebagai kode instruksi
 .global _start                  # Mengekspos label _start agar terlihat oleh linker
 
@@ -90,25 +59,12 @@ end:
 
 .section .rodata                # Menandai blok memori sebagai data Read-Only
 hello_msg:
-    .asciz "Hello World, Bare Metal RISC-V!\n" # String teks otomatis diakhiri byte 0x00 (NULL)
-
+    .asciz "Hello World!\n" # String teks otomatis diakhiri byte 0x00 (NULL)
 ```
 
-#### Analisis Struktur & Mekanisme Kode:
-
-* **`t0, t1, t2`:** Merupakan register sementara (*temporary registers*) pada arsitektur RISC-V berdasarkan standar ABI (*Application Binary Interface*).
-* **`lb t2, 0(t1)`:** Menggunakan metode *offset addressing*. Mengambil data berukuran 1 byte dari alamat `t1 + 0`.
-* **`sb t2, 0(t0)`:** Proses inti MMIO. Menuliskan data di `t2` langsung ke alamat `0x10000000`. Sinyal bus data akan ditangkap oleh periferal UART QEMU dan dikonversi menjadi output teks.
-* **`beqz t2, end`:** Berfungsi sebagai detektor akhir string. Karena direktif `.asciz` otomatis menyisipkan byte `0x00` di akhir teks, instruksi ini mendeteksi nilai tersebut untuk menghentikan loop.
-* **`end: j end`:** Mengunci *Program Counter* (PC) CPU pada satu titik konstan. Tanpa instruksi ini, CPU akan terus membaca area memori selanjutnya yang berisi data acak (*garbage data*), memicu *kernel panic* level perangkat keras (*illegal instruction exception*).
-
----
+Kode *assembly* di atas bertanggung jawab untuk menginisialisasi penunjuk alamat, membaca karakter satu per satu, dan mengirimkannya ke *port* serial. Dalam arsitektur RISC-V, kita menggunakan register sementara seperti `t0`, `t1`, dan `t2` sesuai standar *Application Binary Interface* (ABI). Proses dimulai dengan memuat alamat UART ke dalam `t0` dan alamat string ke dalam `t1`. Di dalam perulangan `print_loop`, instruksi `lb` mengambil satu *byte* karakter dari alamat memori, sedangkan instruksi `beqz` bertugas sebagai detektor akhir string yang akan menghentikan proses jika mendeteksi nilai *null* (`0x00`). Jika karakter bukan *null*, instruksi inti MMIO yaitu `sb` akan mengeksekusinya dengan menuliskan data tersebut langsung ke alamat memori UART, yang kemudian ditangkap oleh QEMU menjadi *output* teks. Program ini kemudian diakhiri dengan instruksi `j end` yang mengunci *Program Counter* pada satu titik konstan, sebuah jebakan mematikan yang mencegah CPU membaca area memori acak selanjutnya yang bisa memicu *kernel panic*.
 
 ### 2. Membuat Skrip Tata Letak Memori (`linker.ld`)
-
-Tanpa OS, compiler tidak tahu di mana posisi RAM fisik berada. Skrip penaut (*linker script*) ini berfungsi sebagai penunjuk arah bagi compiler untuk menyusun struktur biner.
-
-Buat berkas bernama `linker.ld`:
 
 ```ld
 OUTPUT_ARCH( "riscv" )          /* Menetapkan arsitektur target: RISC-V */
@@ -133,19 +89,11 @@ SECTIONS
     .data : { *(.data) }
     .bss  : { *(.bss)  }
 }
-
 ```
 
-#### Analisis Parameter Linker:
-
-* **`. = 0x80000000;`:** Tanda titik (`.`) disebut sebagai *Location Counter*. Seluruh penempatan seksi di bawah baris ini akan dihitung secara inkremental dimulai dari alamat dasar tersebut.
-* **`*(.text)`:** Karakter wildcard `*` berarti instruksi linker ini berlaku untuk semua berkas objek (`.o`) yang terlibat dalam proses pencatatan tautan memori.
-
----
+Tanpa keberadaan sistem operasi, *compiler* tidak mengetahui di mana posisi RAM fisik berada. Oleh karena itu, skrip penaut atau *linker script* di atas berfungsi sebagai penunjuk arah bagi *compiler* dalam menyusun struktur biner. Skrip ini menggunakan tanda titik sebagai *Location Counter* yang ditetapkan pada alamat dasar `0x80000000`. Seluruh penempatan seksi seperti blok instruksi `.text` dan blok data statis `.rodata` dari semua berkas objek akan disusun secara berurutan dan dihitung secara inkremental dimulai dari alamat dasar fisik RAM QEMU tersebut.
 
 ### 3. Proses Kompilasi dan Ekstraksi Biner
-
-Jalankan rangkaian perintah berikut pada terminal Anda secara berurutan:
 
 ```bash
 # Langkah A: Mengompilasi dan menautkan alamat memori secara langsung menjadi berkas ELF
@@ -153,98 +101,39 @@ riscv64-unknown-elf-gcc -nostdlib -nostartfiles -T linker.ld -o hello.elf hello.
 
 # Langkah B: Mengekstraksi kode mesin murni dari format ELF menjadi biner mentah
 riscv64-unknown-elf-objcopy -O binary hello.elf hello.bin
-
 ```
 
-#### Penjelasan Bendera (Flags) Kompilasi:
-
-* **`-nostdlib`:** Menginstruksikan compiler untuk benar-benar mengabaikan pustaka standar C. Menghindari eror akibat tidak ditemukannya fungsi sistem seperti `crts0`.
-* **`-nostartfiles`:** Melarang penyertaan berkas inisialisasi standar internal GCC. Kita mendefinisikan prosedur *boot* kita sendiri melalui label `_start`.
-* **`-T linker.ld`:** Memaksa proses tautan untuk patuh secara mutlak pada aturan tata letak memori yang sudah kita rancang di dalam berkas `linker.ld`.
-* **`-O binary`:** Parameter output untuk `objcopy` yang memerintahkan sistem membuang seluruh tabel simbol, informasi arsitektur, dan metadata *debugging* dari berkas ELF, menghasilkan struktur biner polos seukuran data aslinya.
-
----
+Untuk menghasilkan berkas biner akhir, Anda perlu menjalankan proses kompilasi dan ekstraksi di atas secara berurutan. Pada tahap kompilasi, *flag* `-nostdlib` dan `-nostartfiles` digunakan untuk menginstruksikan *compiler* agar mengabaikan pustaka standar C dan berkas inisialisasi internal GCC, karena kita mendefinisikan prosedur *boot* kita sendiri secara manual. Kita juga menggunakan *flag* `-T` untuk memaksa proses tautan mematuhi aturan tata letak memori di dalam berkas `linker.ld`. Setelah berkas ELF terbentuk, perintah `objcopy` dengan parameter `-O binary` digunakan untuk membuang seluruh metadata dan tabel simbol, sehingga menghasilkan struktur biner polos murni yang ukurannya sama persis dengan data aslinya.
 
 ### 4. Mengeksekusi Berkas Biner Pada Perangkat Keras Virtual
 
-Gunakan perintah berikut untuk menyuapkan biner hasil kompilasi langsung ke dalam komponen sistem emulator QEMU:
-
 ```bash
 qemu-system-riscv64 -machine virt -bios hello.bin -nographic
-
 ```
 
-#### Penjelasan Parameter QEMU:
-
-* **`-machine virt`:** Memilih profil mesin virtual terarah yang menyediakan alamat RAM pada basis `0x80000000`.
-* **`-bios hello.bin`:** Memasukkan berkas biner kita untuk bertindak langsung sebagai *Firmware/BIOS*. QEMU secara otomatis menyalin isi dari berkas `hello.bin` langsung tepat ke alamat awal memori RAM (`0x80000000`) sebelum melepas pin *reset* CPU.
-* **`-nographic`:** Menolak pembukaan jendela GUI eksternal dan memaksa QEMU menghubungkan interkoneksi MMIO UART (`0x10000000`) langsung ke aliran input/output terminal tempat Anda menjalankan perintah tersebut.
+Setelah berkas biner mentah siap, Anda dapat mengeksekusinya di dalam komponen sistem emulator QEMU. Parameter `-machine virt` pada perintah di atas memilih profil mesin virtual yang menyediakan alamat RAM pada basis yang tepat, sedangkan parameter `-bios` memerintahkan QEMU untuk menyalin isi dari berkas `hello.bin` secara langsung ke alamat awal memori RAM tersebut sebelum melepas pin *reset* CPU. Penggunaan parameter `-nographic` sangat penting karena ia akan menolak pembukaan jendela grafis eksternal dan langsung menghubungkan interkoneksi MMIO UART ke aliran terminal tempat Anda bekerja.
 
 ---
 
 ## V. Alur Kronologis Eksekusi Sistem (Runtime Flow)
 
-Berikut adalah visualisasi urutan kejadian logis di dalam sistem secara bertahap saat tombol eksekusi ditekan:
+Berikut adalah urutan kejadian logis di dalam sistem secara bertahap saat program dieksekusi:
 
-```text
-+------------------------------------------------------------+
-|                    Siklus Power-On / Reset                 |
-+------------------------------------------------------------+
-                              |
-                              v
-+------------------------------------------------------------+
-| QEMU memuat 'hello.bin' secara utuh ke RAM @ 0x80000000    |
-+------------------------------------------------------------+
-                              |
-                              v
-+------------------------------------------------------------+
-| Core CPU RISC-V aktif -> Lompat ke target awal: 0x80000000 |
-+------------------------------------------------------------+
-                              |
-                              v
-+------------------------------------------------------------+
-| Eksekusi '_start': Register t0 diisi 0x10000000 (UART)     |
-+------------------------------------------------------------+
-                              |
-                              v
-+------------------------------------------------------------+
-| Eksekusi 'print_loop': Baca 1 byte dari alamat teks (t1)   |
-+------------------------------------------------------------+
-                              |
-                              v
-                    /                   \
-                   /                     \
-                  v                       v
-        [Apakah Byte == 0x00?]   [Apakah Byte != 0x00?]
-                  |                       |
-                  | YA                    | TIDAK
-                  v                       v
-+-------------------------+     +-------------------------+
-| Lompat ke label 'end'   |     | Kirim byte ke t0 (MMIO) |
-| (Masuk Infinite Loop)   |     +-------------------------+
-+-------------------------+               |
-                                          v
-                                +-------------------------+
-                                | Alamat t1 ditambah 1    |
-                                +-------------------------+
-                                          |
-                                          v
-                                +-------------------------+
-                                | Lompat ke 'print_loop'  |
-                                +-------------------------+
+1. **Power-On / Reset:** Siklus awal saat sistem perangkat keras virtual dinyalakan.
+2. **Pemuatan Biner:** QEMU menyalin berkas `hello.bin` secara utuh ke dalam memori RAM pada alamat `0x80000000`.
+3. **Booting CPU:** *Core* CPU RISC-V aktif dan langsung melompat ke alamat awal `0x80000000` untuk mengeksekusi instruksi pertama.
+4. **Inisialisasi (`_start`):** Register `t0` diisi dengan alamat dasar antarmuka UART (`0x10000000`).
+5. **Membaca Karakter (`print_loop`):** CPU membaca 1 *byte* karakter dari alamat teks yang ditunjuk oleh register `t1`.
+6. **Pengecekan Kondisi (Percabangan):**
+* **Jika *byte* = `0x00` (Selesai):** Program melompat ke label `end` dan mengunci diri dalam *infinite loop* (perulangan tanpa batas) untuk mencegah *error*.
+* **Jika *byte* ≠ `0x00` (Lanjut):** Karakter dikirim ke `t0` (MMIO UART) untuk dicetak, penunjuk alamat `t1` digeser 1 *byte* ke depan, lalu eksekusi kembali memutar ke langkah 5.
 
-```
+---
+
+Visualisasi di atas menggambarkan urutan kejadian logis di dalam sistem secara bertahap sesaat setelah siklus *power-on* atau *reset* dimulai. Emulator QEMU pertama-tama memuat berkas biner secara utuh ke dalam RAM. Setelah *core* CPU RISC-V aktif, sistem langsung melompat ke target alamat eksekusi pertama untuk memproses instruksi. Register kemudian disiapkan untuk menunjuk ke memori UART dan teks yang akan dicetak. Sistem selanjutnya masuk ke dalam perulangan bersyarat untuk membaca dan mengirimkan *byte* data satu per satu ke alamat MMIO hingga mencapai akhir string, sebelum akhirnya mengunci diri dalam perulangan tanpa batas untuk menjaga stabilitas sirkuit.
 
 ---
 
 ## VI. Cara Menghentikan Simulasi
 
-Karena program *bare-metal* ini diakhiri dengan instruksi perangkap tanpa batas (`j end`) untuk menjaga stabilitas sirkuit elektrik CPU, terminal Anda akan terkunci sepenuhnya di dalam emulasi mesin.
-
-Untuk mematikan QEMU dan kembali ke terminal Linux asli Anda, gunakan kombinasi tombol pintas (*shortcut*) berikut:
-
-1. Tekan tombol **`Ctrl + A`** secara bersamaan di keyboard.
-2. Lepaskan kedua tombol tersebut.
-3. Segera tekan tombol huruf **`X`** pada keyboard Anda.
-
-Terminal akan menampilkan pesan `QEMU: Terminated` dan mengembalikan kontrol kendali penuh ke *shell* Linux Anda.
+Program *bare-metal* ini sengaja dirancang untuk berakhir dengan instruksi perangkap tanpa batas demi menjaga stabilitas sistem, sehingga terminal Anda akan terkunci sepenuhnya di dalam emulasi mesin. Untuk mematikan QEMU dan mengembalikan kontrol penuh ke *shell* Linux asli Anda, Anda hanya perlu menekan tombol `Ctrl` dan `A` secara bersamaan pada *keyboard*, melepaskannya, lalu segera menekan tombol huruf `X`. Terminal akan menampilkan pesan pengakhiran dari QEMU dan Anda bisa kembali bekerja secara normal.
