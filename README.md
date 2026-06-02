@@ -130,10 +130,6 @@ Berikut adalah urutan kejadian logis di dalam sistem secara bertahap saat progra
 
 ---
 
-Visualisasi di atas menggambarkan urutan kejadian logis di dalam sistem secara bertahap sesaat setelah siklus *power-on* atau *reset* dimulai. Emulator QEMU pertama-tama memuat berkas biner secara utuh ke dalam RAM. Setelah *core* CPU RISC-V aktif, sistem langsung melompat ke target alamat eksekusi pertama untuk memproses instruksi. Register kemudian disiapkan untuk menunjuk ke memori UART dan teks yang akan dicetak. Sistem selanjutnya masuk ke dalam perulangan bersyarat untuk membaca dan mengirimkan *byte* data satu per satu ke alamat MMIO hingga mencapai akhir string, sebelum akhirnya mengunci diri dalam perulangan tanpa batas untuk menjaga stabilitas sirkuit.
-
----
-
 ## VI. Cara Menghentikan Simulasi
 
 Program *bare-metal* ini sengaja dirancang untuk berakhir dengan instruksi perangkap tanpa batas demi menjaga stabilitas sistem, sehingga terminal Anda akan terkunci sepenuhnya di dalam emulasi mesin. Untuk mematikan QEMU dan mengembalikan kontrol penuh ke *shell* Linux asli Anda, Anda hanya perlu menekan tombol `Ctrl` dan `A` secara bersamaan pada *keyboard*, melepaskannya, lalu segera menekan tombol huruf `X`. Terminal akan menampilkan pesan pengakhiran dari QEMU dan Anda bisa kembali bekerja secara normal.
